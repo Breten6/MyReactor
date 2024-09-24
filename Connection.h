@@ -5,21 +5,29 @@
 #include "Channel.h"
 #include "EventLoop.h"
 #include "Buffer.h"
+#include <memory>
+#include <atomic>
+
+class Connection;
 class EventLoop;
 class Channel;
-class Connection
+using spConnection=std::shared_ptr<Connection>;
+
+class Connection:public std::enable_shared_from_this<Connection>
 {
 private:
-    EventLoop *loop_; 
-    Socket *clientsock_;
-    Channel *clientchannel_;
+    const std::unique_ptr<EventLoop>& loop_; 
+    std::unique_ptr<Socket> clientsock_;
+    std::unique_ptr<Channel> clientchannel_;
     Buffer inputbuffer_;
     Buffer outputbuffer_;
-    std::function<void(Connection*)> closecallback_;
-    std::function<void(Connection*)> errorcallback_;    
-    std::function<void(Connection*,std::string)> onmessagecallback_;  
+    std::atomic_bool disconnect_; //workers threads wiil check this value to avoid client disconnecting in the middle of process
+    std::function<void(spConnection)> closecallback_;
+    std::function<void(spConnection)> errorcallback_;    
+    std::function<void(spConnection,std::string&)> onmessagecallback_;  
+    std::function<void(spConnection)> sendcompletecallback_;
 public:
-    Connection(EventLoop *loop,Socket* clientsock);
+    Connection(const std::unique_ptr<EventLoop>& loop,std::unique_ptr<Socket> clientsock);
     ~Connection();
     int fd()const;
     std::string ip() const;
@@ -27,7 +35,10 @@ public:
     void onmessage();
     void closecallback();
     void errorcallback();
-    void setclosecallback(std::function<void(Connection*)> fn);
-    void seterrorcallback(std::function<void(Connection*)> fn);
-    void setonmessagecallback(std::function<void(Connection*,std::string)> fn); 
+    void setclosecallback(std::function<void(spConnection)> fn);
+    void seterrorcallback(std::function<void(spConnection)> fn);
+    void setonmessagecallback(std::function<void(spConnection,std::string&)> fn); 
+    void writecallback();
+    void setsendcompletecallback(std::function<void(spConnection)> fn);
+    void send(const char* data, size_t size);
 };

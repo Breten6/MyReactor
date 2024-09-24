@@ -45,7 +45,6 @@ int main(int argc, char *argv[])
         int len=strlen(buf);
         memcpy(tmpbuf,&len,4);
         memcpy(tmpbuf+4,buf,len);
-
         send(sockfd,tmpbuf,len+4,0);
     }
     for(int ii=0;ii<100;ii++){  

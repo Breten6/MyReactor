@@ -22,14 +22,22 @@ void Epoll::updatechannel(Channel *ch){
         if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,ch->fd(),&ev)==-1){
             printf("epoll_ctl() failed(%d).\n",errno); exit(-1);
         }
-        ch->setinepoll();
+        ch->setinepoll(true);
+    }
+}
+void Epoll::removechannel(Channel *ch){
+    if(ch->inpoll()){
+        printf("remove channel\n");
+        if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,ch->fd(),0)==-1){
+            printf("epoll_ctl() removed(%d).\n",errno); exit(-1);
+        }
     }
 }
 std::vector<Channel*> Epoll::loop(int timeout){
     std::vector<Channel*> channels; 
 
     bzero(events_,sizeof(events_));
-    int infds=epoll_wait(epollfd_,events_,10,-1);
+    int infds=epoll_wait(epollfd_,events_,10,timeout);
     
     if (infds < 0)
     {
@@ -38,7 +46,8 @@ std::vector<Channel*> Epoll::loop(int timeout){
 
     if (infds == 0)
     {
-        printf("epoll_wait() timeout.\n");return channels;
+        //printf("epoll_wait() timeout.\n");
+        return channels;
     }
     for (int ii=0;ii<infds;ii++) {
         Channel* ch = (Channel*)events_[ii].data.ptr;

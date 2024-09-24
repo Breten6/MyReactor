@@ -1,20 +1,21 @@
 #include "Connection.h"
 
 
-Connection::Connection(EventLoop *loop,Socket *clientsock):loop_(loop),clientsock_(clientsock)
+Connection::Connection(const std::unique_ptr<EventLoop>& loop,std::unique_ptr<Socket> clientsock):
+loop_(loop),clientsock_(std::move(clientsock)),disconnect_(false),clientchannel_(new Channel(loop_,clientsock_->fd()))
 {
-    clientchannel_=new Channel(loop_,clientsock_->fd());   
+    // clientchannel_=new Channel(loop_,clientsock_->fd());   
     clientchannel_->setreadcallback(std::bind(&Connection::onmessage,this));
     clientchannel_->setclosecallback(std::bind(&Connection::closecallback,this));
     clientchannel_->seterrorcallback(std::bind(&Connection::errorcallback,this));
+    clientchannel_->setwritecallback(std::bind(&Connection::writecallback,this));
     clientchannel_->useet();                 // edge trigger
     clientchannel_->enablereading(); 
 }
 
 Connection::~Connection()
 {
-    delete clientsock_;
-    delete clientchannel_;
+    printf("Connection distructed。\n");
 }
 
 int Connection::fd()const{
@@ -58,7 +59,7 @@ void Connection::onmessage(){
                 // std::string tmpbuf((char*)&len,4);
                 // tmpbuf.append(message);        
                 // send(fd(),tmpbuf.data(),tmpbuf.size(),0);  
-                onmessagecallback_(this, message);
+                onmessagecallback_(shared_from_this(), message);
             }
 
             break;
@@ -66,31 +67,58 @@ void Connection::onmessage(){
         else if (nread == 0)
         {  
             // printf("client(eventfd=%d) disconnected.\n",fd_);
-            // close(fd_);    
+            // close(fd_);   
             closecallback(); 
             break;
         }
     }
 }
 void Connection::closecallback(){
-    printf("client(eventfd=%d) disconnected.\n",fd());
-    close(fd());            // disconnect client
+    // printf("client(eventfd=%d) disconnected.\n",fd());
+    // close(fd());            // disconnect client
+    disconnect_=true;
+    clientchannel_->remove();
+    closecallback_(shared_from_this());
 }
 void Connection::errorcallback(){
-    printf("client(eventfd=%d) error.\n",fd());
-    close(fd());  
+    // printf("client(eventfd=%d) error.\n",fd());
+    // close(fd());  
+    disconnect_=true;
+    clientchannel_->remove();
+    errorcallback_(shared_from_this());
 }
 
-void Connection::setclosecallback(std::function<void(Connection*)> fn)    
+void Connection::setclosecallback(std::function<void(spConnection)> fn)    
 {
     closecallback_=fn;
 }
 
-void Connection::seterrorcallback(std::function<void(Connection*)> fn)    
+void Connection::seterrorcallback(std::function<void(spConnection)> fn)    
 {
     errorcallback_=fn;
 }
-void Connection::setonmessagecallback(std::function<void(Connection*,std::string)> fn)    
+void Connection::setonmessagecallback(std::function<void(spConnection,std::string&)> fn)    
 {
     onmessagecallback_=fn;
+}
+void Connection::setsendcompletecallback(std::function<void(spConnection)> fn){
+    sendcompletecallback_=fn;
+}
+void Connection::send(const char* data, size_t size){
+        if (disconnect_==true) {  printf("client disconnected, no more message sending\n"); return;}
+        outputbuffer_.genmessage(data,size);
+        // register write evenet
+        clientchannel_->enablewriting();
+
+}
+
+void Connection::writecallback(){
+    int written = ::send(fd(),outputbuffer_.data(),outputbuffer_.size(),0);//try send everything inside buffer
+    if(written>0){
+        outputbuffer_.erase(0,written);
+    }
+    if(outputbuffer_.size() == 0){ //avoid busy loop
+        clientchannel_->disablewriting();
+        sendcompletecallback_(shared_from_this());
+    }
 }

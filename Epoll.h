@@ -21,5 +21,6 @@ class Epoll{
         ~Epoll();
         // void addfd(int fd, uint32_t op);
         void updatechannel(Channel *ch);
+        void removechannel(Channel *ch);
         std::vector<Channel*> loop(int timeout = -1);
 };
