@@ -34,8 +34,8 @@ int main(int argc, char *argv[])
     }
 
     printf("connect ok.\n");
-
-    for (int ii=0;ii<100;ii++)
+    sleep(1000);
+    for (int ii=0;ii<10;ii++)
     {
         memset(buf,0,sizeof(buf));
         // printf("please input:"); scanf("%s",buf);
@@ -46,14 +46,15 @@ int main(int argc, char *argv[])
         memcpy(tmpbuf,&len,4);
         memcpy(tmpbuf+4,buf,len);
         send(sockfd,tmpbuf,len+4,0);
-    }
-    for(int ii=0;ii<100;ii++){  
-        int len;
+    // }
+    // for(int ii=0;ii<100;ii++){  
+        // int len;
         recv(sockfd,&len,4,0); 
 
         memset(buf,0,sizeof(buf));
         recv(sockfd,buf,len,0);
 
         printf("recv:%s\n",buf);
+        sleep(1);
     }
 } 

@@ -53,3 +53,6 @@ ThreadPool::~ThreadPool()
 	for (std::thread &th : threads_) 
         th.join();
 }
+size_t ThreadPool::size(){
+	return threads_.size();
+}

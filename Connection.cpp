@@ -1,7 +1,7 @@
 #include "Connection.h"
 
 
-Connection::Connection(const std::unique_ptr<EventLoop>& loop,std::unique_ptr<Socket> clientsock):
+Connection::Connection(EventLoop* loop,std::unique_ptr<Socket> clientsock):
 loop_(loop),clientsock_(std::move(clientsock)),disconnect_(false),clientchannel_(new Channel(loop_,clientsock_->fd()))
 {
     // clientchannel_=new Channel(loop_,clientsock_->fd());   
@@ -59,6 +59,8 @@ void Connection::onmessage(){
                 // std::string tmpbuf((char*)&len,4);
                 // tmpbuf.append(message);        
                 // send(fd(),tmpbuf.data(),tmpbuf.size(),0);  
+                lastatime_ = Timestamp::now();
+                std::cout<<"Lasttime= "<<lastatime_.tostring()<<std::endl;
                 onmessagecallback_(shared_from_this(), message);
             }
 
@@ -105,13 +107,23 @@ void Connection::setsendcompletecallback(std::function<void(spConnection)> fn){
     sendcompletecallback_=fn;
 }
 void Connection::send(const char* data, size_t size){
+
         if (disconnect_==true) {  printf("client disconnected, no more message sending\n"); return;}
-        outputbuffer_.genmessage(data,size);
-        // register write evenet
-        clientchannel_->enablewriting();
+        std::shared_ptr<std::string> message(new std::string(data));
+        if(loop_->isinloopthread()){//check if we are currently in IO thread
+            printf("send() in IO loop\n");
+            sendinloop(message);
+        }else{
+            printf("send() not in IO loop\n");
+            loop_->queueinloop(std::bind(&Connection::sendinloop,this,message));
+        }
 
 }
-
+void Connection::sendinloop(std::shared_ptr<std::string> data){
+        outputbuffer_.genmessage(data->data(),data->size());
+        // register write evenet
+        clientchannel_->enablewriting();
+}
 void Connection::writecallback(){
     int written = ::send(fd(),outputbuffer_.data(),outputbuffer_.size(),0);//try send everything inside buffer
     if(written>0){
@@ -122,3 +134,7 @@ void Connection::writecallback(){
         sendcompletecallback_(shared_from_this());
     }
 }
+bool Connection::timeout(time_t now,int val)           
+ {
+    return now-lastatime_.toint()>val;    
+ }

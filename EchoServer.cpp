@@ -70,7 +70,12 @@ void EchoServer::HandleMessage(spConnection conn,std::string& message)
     // // tmpbuf.append(message);
           
     // conn->send(message.data(),message.size());
-    threadpool_.addtask(std::bind(&EchoServer::OnMessage,this,conn,message));
+    if(threadpool_.size()==0){
+        OnMessage(conn,message);
+    }else{
+        threadpool_.addtask(std::bind(&EchoServer::OnMessage,this,conn,message));
+    }
+
     
 }
 void EchoServer::OnMessage(spConnection conn,std::string& message){
